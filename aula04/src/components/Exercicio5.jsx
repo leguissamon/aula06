@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiGet, mensagemDeErro } from '../api'
 
 export default function Exercicio5() {
   const [itens, setItens] = useState([])
@@ -14,19 +15,16 @@ export default function Exercicio5() {
         setCarregando(true)
         setErro(null)
 
-      
         await new Promise(resolve => setTimeout(resolve, 1500))
 
-        const resp = await fetch('https://jsonplaceholder.typicode.com/users', { signal })
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-        const data = await resp.json()
+        const data = await apiGet('/users', { signal })
         setItens(data)
       } catch (e) {
         if (e.name !== 'AbortError') {
-          setErro(e.message)
+          setErro(mensagemDeErro(e))
         }
       } finally {
-        setCarregando(false)
+        if (!signal.aborted) setCarregando(false)
       }
     }
 

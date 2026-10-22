@@ -1,147 +1,118 @@
 import { useEffect, useState } from 'react'
+import { apiGet, apiPost, apiPut, apiDelete, mensagemDeErro } from '../api'
 
 export default function ListaUsuarios() {
   const [usuarios, setUsuarios] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState(null)
-  const [editando, setEditando] = useState(null) // vai guardar o usuário sendo editado
+  const [editando, setEditando] = useState(null) // usuário sendo editado
   const [novoUsuario, setNovoUsuario] = useState(null) // null = form fechado
 
   useEffect(() => {
-    const controle = new AbortController() 
-    const signal = controle.signal          
+    const controle = new AbortController()
+    const signal = controle.signal
 
     async function buscar() {
       try {
         setCarregando(true)
         setErro(null)
-        const resp = await fetch('https://jsonplaceholder.typicode.com/users', { signal })
-        // const resp = await fetch('https://jsonplaceholder.typicode.com/testehttp', { signal }) // descomente para testar o erro
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-        const data = await resp.json()
-      // const data = [] // descomente para testar o estado vazio
+        // para testar o 404: troque '/users' por '/testehttp'
+        const data = await apiGet('/users', { signal })
+        // const data = [] // descomente para testar o estado vazio
         setUsuarios(data)
       } catch (e) {
         if (e.name !== 'AbortError') {
-          
-          setErro(e.message)
+          setErro(mensagemDeErro(e))
         }
       } finally {
-        setCarregando(false)
+        if (!signal.aborted) setCarregando(false)
       }
     }
 
     buscar()
-
-    
     return () => controle.abort()
   }, [])
 
-
-  /////excluir usuario////
-
+  ///// excluir usuario /////
   async function excluirUsuario(id) {
-  const backup = usuarios
-  setUsuarios(prev => prev.filter(u => u.id !== id)) // remove otimista
-  setErro(null)
+    const backup = usuarios
+    setUsuarios(prev => prev.filter(u => u.id !== id)) // remove otimista
+    setErro(null)
 
-  try {
-    const resp = await fetch(`https://jsonplaceholder.typicode.com/users/${id}`, { //para testar, só mudar o /users para /teste ou outro rota 
-      method: 'DELETE'
-    })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    console.log(`Usuário ${id} excluído`)
-  } catch (e) {
-    setUsuarios(backup) // rollback
-    setErro(e.message)
+    try {
+      await apiDelete(`/users/${id}`) // para testar, troque /users por /teste
+      console.log(`Usuário ${id} excluído`)
+    } catch (e) {
+      setUsuarios(backup) // rollback
+      setErro(mensagemDeErro(e))
+    }
   }
-}
 
-///editar usuario///
-async function salvarEdicao(e) {
-  e.preventDefault()
-  const backup = usuarios
-  setErro(null)
+  ///// editar usuario /////
+  async function salvarEdicao(e) {
+    e.preventDefault()
+    const backup = usuarios
+    setErro(null)
 
-  try {
-    const resp = await fetch(`https://jsonplaceholder.typicode.com/users/${editando.id}`, {//para testar, só mudar o /users para /teste ou outro rota 
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editando)
-    })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-
-    const usuarioAtualizado = await resp.json()
-    setUsuarios(prev =>
-      prev.map(u => (u.id === editando.id ? usuarioAtualizado : u))
-    )
-    setEditando(null)
-  } catch (e) {
-    setUsuarios(backup) // rollback
-    setErro(e.message)
+    try {
+      const usuarioAtualizado = await apiPut(`/users/${editando.id}`, editando)
+      setUsuarios(prev =>
+        prev.map(u => (u.id === editando.id ? usuarioAtualizado : u))
+      )
+      setEditando(null)
+    } catch (e) {
+      setUsuarios(backup) // rollback
+      setErro(mensagemDeErro(e))
+    }
   }
-}
 
-/////criar usuario////
+  ///// criar usuario /////
+  async function criarUsuario(e) {
+    e.preventDefault()
+    const backup = usuarios
+    setErro(null)
 
-async function criarUsuario(e) {
-  e.preventDefault()
-  const backup = usuarios
-  setErro(null)
-
-  try {
-    const resp = await fetch('https://jsonplaceholder.typicode.com/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(novoUsuario)
-    })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-
-    const criado = await resp.json()
-    setUsuarios(prev => [...prev, criado])
-    setNovoUsuario(null)
-  } catch (e) {
-    setUsuarios(backup)
-    setErro(e.message)
+    try {
+      // Exercício 5: header extra, combinado com o Content-Type padrão
+      const criado = await apiPost('/users', novoUsuario, {
+        headers: { 'X-Custom': 'aula07' },
+      })
+      setUsuarios(prev => [...prev, criado])
+      setNovoUsuario(null)
+    } catch (e) {
+      setUsuarios(backup)
+      setErro(mensagemDeErro(e))
+    }
   }
-}
-
-
 
   if (carregando) return <p>Carregando...</p>
-  if (erro && usuarios.length === 0)     return <p>Erro: {erro}</p>
+  if (erro && usuarios.length === 0) return <p>Erro: {erro}</p>
   if (usuarios.length === 0) return <p>Nenhum usuário encontrado.</p>
 
-  return ( 
-    //{usuarios.length === 0 && !carregando && !erro && ( 
-    //<p>Nenhum usuário cadastrado ainda.</p>
-    //)}
+  return (
     <>
-    
-   
-   {erro && <p>Erro: {erro}</p>}
+      {erro && <p>Erro: {erro}</p>}
 
-{novoUsuario ? (
-  <form onSubmit={criarUsuario}>
-    <input
-      placeholder="Nome"
-      value={novoUsuario.name}
-      onChange={e => setNovoUsuario({ ...novoUsuario, name: e.target.value })}
-    />
-    <input
-      placeholder="Email"
-      value={novoUsuario.email}
-      onChange={e => setNovoUsuario({ ...novoUsuario, email: e.target.value })}
-    />
-    <button type="submit">Salvar</button>
-    <button type="button" onClick={() => setNovoUsuario(null)}>Cancelar</button>
-  </form>
-) : (
-  <button onClick={() => setNovoUsuario({ name: '', email: '' })}>Novo</button>
-)}
+      {novoUsuario ? (
+        <form onSubmit={criarUsuario}>
+          <input
+            placeholder="Nome"
+            value={novoUsuario.name}
+            onChange={e => setNovoUsuario({ ...novoUsuario, name: e.target.value })}
+          />
+          <input
+            placeholder="Email"
+            value={novoUsuario.email}
+            onChange={e => setNovoUsuario({ ...novoUsuario, email: e.target.value })}
+          />
+          <button type="submit">Salvar</button>
+          <button type="button" onClick={() => setNovoUsuario(null)}>Cancelar</button>
+        </form>
+      ) : (
+        <button onClick={() => setNovoUsuario({ name: '', email: '' })}>Novo</button>
+      )}
 
-
-  <ul>
+      <ul>
         {usuarios.map(u => (
           <li key={u.id}>
             {editando?.id === u.id ? (
